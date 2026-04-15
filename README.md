@@ -39,25 +39,26 @@ Aggregate output includes:
 
 ## Example Output
 
-From 8,676 real b1e55ed signals (March 19 – April 13 2026), regime gate disabled to reveal secondary gate structure:
+From 100 stratified-sample b1e55ed signals (March 19 – April 13 2026), regime gate disabled to reveal secondary gate structure:
 
 ```
-Signals traced: 8676
-Fate changes:   2468 (28.4%)
-Pass rate:      71.6%
+Signals traced: 100
+Fate changes:   51 (51.0%)
+Pass rate:      49.0%
+Actions:        49 EMIT, 33 WITHHOLD, 18 INVERT
 
 Per-gate failure rates:
-  duration_gate:    400/8676 (4.6%) CI=[4.2%, 5.1%]
-  confidence_gate:  28/8676  (0.3%) CI=[0.2%, 0.5%]
-  weak_symbol_gate: 2168/8676 (25.0%) CI=[24.1%, 25.9%]
+  duration_gate:    33/100 (33.0%) CI=[24.5%, 42.7%]
+  confidence_gate:   0/100 (0.0%)  CI=[0.0%, 3.7%]
+  weak_symbol_gate: 18/100 (18.0%) CI=[11.7%, 26.7%]
 
-Most impactful gate:  weak_symbol_gate
+Most impactful gate:  duration_gate
 Most impacted symbol: SOL
 
-Chi-squared: χ²=1855.43, df=6, p=0.0000, V=0.5978 (NOT independent)
+Chi-squared: χ²=39.12, df=6, p=0.0000, V=0.4392 (NOT independent)
 ```
 
-SOL drives the non-independence: 100% of SOL signals get INVERT action via the weak symbol gate (severity=SEVERE, p=0.0001).
+SOL drives the non-independence: 100% of SOL signals in the mature-duration bucket get INVERT action via the weak symbol gate (severity=SEVERE, p=0.0001). Duration gate catches all 4 symbols equally during the <15-day early regime period.
 
 ## Files
 
@@ -65,18 +66,17 @@ SOL drives the non-independence: 100% of SOL signals get INVERT action via the w
 |------|-------------|
 | `trace_signal.py` | Zero-dep forensics runner (~700 lines) |
 | `signal_forensics_schema.json` | JSON Schema draft 2020-12 (20 $defs) |
-| `verify_forensics.py` | Zero-trust verifier (958 checks, 17 categories) |
+| `verify_forensics.py` | Zero-trust verifier (929 checks, 17 categories) |
 | `tests/test_forensics.py` | 144 tests |
-| `examples/forensic_report.json` | Dated report (default policy, all SYSTEMIC) |
-| `examples/forensic_report_no_regime_gate.json` | Dated report (regime gate disabled) |
+| `examples/forensic_report.json` | Dated report from 100 stratified-sample signals |
 
 ## Verification
 
 ```
 $ python3 verify_forensics.py examples/forensic_report.json
 
-Signal Forensics Verification — 958 checks
-  Total: 958/958 PASS, 0 FAIL — Grade A
+Signal Forensics Verification — 929 checks
+  Total: 929/929 PASS, 0 FAIL — Grade A
 ```
 
 17 verification categories: structure, version, meta, policy, trace_structure, stage_verdicts, fate_changes, aggregates, gate_rates, wilson_ci, symbol_gates, stage_summary, fate_summary, failure_modes, chi_squared, limitations, content_hash.
