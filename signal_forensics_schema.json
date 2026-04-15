@@ -1,0 +1,503 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://postfiat.org/schemas/signal-forensics/v1.0.0",
+  "title": "Consumer Signal Forensics Report",
+  "description": "Per-signal lifecycle traces through 6 protocol stages with fate-changing gate identification and aggregate gate-failure analysis. Deterministic consumer-side forensics for debugging signal underperformance.",
+
+  "type": "object",
+  "required": [
+    "schema_version", "report_meta", "routing_policy_snapshot",
+    "signal_traces", "aggregate_forensics", "fate_changing_summary",
+    "failure_mode_ranking", "chi_squared_independence",
+    "limitations", "content_hash"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "report_meta": { "$ref": "#/$defs/report_meta" },
+    "routing_policy_snapshot": { "$ref": "#/$defs/routing_policy_snapshot" },
+    "signal_traces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/signal_trace" },
+      "description": "Per-signal lifecycle traces through all 6 protocol stages."
+    },
+    "aggregate_forensics": { "$ref": "#/$defs/aggregate_forensics" },
+    "fate_changing_summary": { "$ref": "#/$defs/fate_changing_summary" },
+    "failure_mode_ranking": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/failure_mode_entry" },
+      "description": "Failure modes ranked by frequency (most common first)."
+    },
+    "chi_squared_independence": { "$ref": "#/$defs/chi_squared_result" },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/limitation" }
+    },
+    "content_hash": { "$ref": "#/$defs/hash_chain" }
+  },
+
+  "$defs": {
+    "report_meta": {
+      "type": "object",
+      "required": [
+        "generated_at", "generator_version", "source_artifacts",
+        "total_signals_traced", "total_with_fate_change"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": { "type": "string", "format": "date-time" },
+        "generator_version": { "type": "string" },
+        "source_artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifact_ref" }
+        },
+        "total_signals_traced": { "type": "integer", "minimum": 0 },
+        "total_with_fate_change": { "type": "integer", "minimum": 0 },
+        "date_range": {
+          "type": "object",
+          "properties": {
+            "start": { "type": "string" },
+            "end": { "type": "string" }
+          }
+        }
+      }
+    },
+    "artifact_ref": {
+      "type": "object",
+      "required": ["name", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "routing_policy_snapshot": {
+      "type": "object",
+      "required": ["gates", "symbols"],
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string" },
+        "gates": {
+          "type": "object",
+          "description": "Active gate configuration with thresholds.",
+          "properties": {
+            "regime_gate": { "$ref": "#/$defs/gate_config" },
+            "duration_gate": { "$ref": "#/$defs/gate_config" },
+            "confidence_gate": { "$ref": "#/$defs/gate_config" },
+            "voi_gate": { "$ref": "#/$defs/gate_config" },
+            "weak_symbol_gate": { "$ref": "#/$defs/gate_config" }
+          },
+          "additionalProperties": true
+        },
+        "symbols": {
+          "type": "object",
+          "description": "Per-symbol overrides.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "gate_config": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "threshold": { "description": "Primary threshold value for this gate." }
+      }
+    },
+    "signal_trace": {
+      "type": "object",
+      "required": [
+        "signal_id", "symbol", "direction", "confidence",
+        "stages", "final_action", "has_fate_change"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "signal_id": { "type": "string" },
+        "signal_client_id": { "type": "string" },
+        "symbol": { "type": "string" },
+        "direction": { "type": "string", "enum": ["bullish", "bearish"] },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "horizon_hours": { "type": "number" },
+        "timestamp": { "type": "string" },
+        "regime": { "type": "string" },
+        "regime_duration_days": { "type": "number" },
+        "stages": {
+          "type": "object",
+          "required": [
+            "schema_validation", "routing", "resolution",
+            "aggregation", "proof_inclusion", "trust_contribution"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "schema_validation": { "$ref": "#/$defs/stage_result" },
+            "routing": { "$ref": "#/$defs/routing_stage_result" },
+            "resolution": { "$ref": "#/$defs/resolution_stage_result" },
+            "aggregation": { "$ref": "#/$defs/aggregation_stage_result" },
+            "proof_inclusion": { "$ref": "#/$defs/proof_stage_result" },
+            "trust_contribution": { "$ref": "#/$defs/trust_stage_result" }
+          }
+        },
+        "final_action": {
+          "type": "string",
+          "enum": ["EMIT", "WITHHOLD", "INVERT"]
+        },
+        "has_fate_change": { "type": "boolean" },
+        "fate_changing_gate": {
+          "type": ["string", "null"],
+          "description": "Name of the gate that changed the signal's fate from EMIT to WITHHOLD/INVERT. Null if no fate change."
+        },
+        "fate_change_detail": {
+          "type": ["string", "null"],
+          "description": "Explanation of why the gate changed the signal's fate."
+        }
+      }
+    },
+    "stage_result": {
+      "type": "object",
+      "required": ["verdict", "rationale"],
+      "additionalProperties": true,
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "SKIP", "INFO"]
+        },
+        "rationale": { "type": "string" },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/check_result" }
+        }
+      }
+    },
+    "routing_stage_result": {
+      "type": "object",
+      "required": ["verdict", "rationale", "gate_results", "routed_action"],
+      "additionalProperties": true,
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "SKIP", "INFO"] },
+        "rationale": { "type": "string" },
+        "gate_results": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gate_result" }
+        },
+        "routed_action": {
+          "type": "string",
+          "enum": ["EMIT", "WITHHOLD", "INVERT"]
+        },
+        "gates_passed": { "type": "integer", "minimum": 0 },
+        "gates_failed": { "type": "integer", "minimum": 0 },
+        "gates_skipped": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "gate_result": {
+      "type": "object",
+      "required": ["gate_name", "verdict", "rationale"],
+      "additionalProperties": true,
+      "properties": {
+        "gate_name": { "type": "string" },
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "SKIP"] },
+        "rationale": { "type": "string" },
+        "threshold": { "description": "The threshold that determined pass/fail." },
+        "actual": { "description": "The actual value compared against threshold." },
+        "is_fate_changing": {
+          "type": "boolean",
+          "description": "True if this gate changed the signal from EMIT to WITHHOLD/INVERT."
+        }
+      }
+    },
+    "resolution_stage_result": {
+      "type": "object",
+      "required": ["verdict", "rationale"],
+      "additionalProperties": true,
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "SKIP", "INFO"] },
+        "rationale": { "type": "string" },
+        "direction_correct": { "type": "boolean" },
+        "outcome": { "type": "number", "enum": [0.0, 1.0] },
+        "brier_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "karma": { "type": "number" },
+        "pct_change": { "type": "number" },
+        "start_price": { "type": "number" },
+        "end_price": { "type": "number" }
+      }
+    },
+    "aggregation_stage_result": {
+      "type": "object",
+      "required": ["verdict", "rationale"],
+      "additionalProperties": true,
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "SKIP", "INFO"] },
+        "rationale": { "type": "string" },
+        "reputation_weight": { "type": "number" },
+        "contribution_magnitude": { "type": "number" },
+        "solo_producer": {
+          "type": "boolean",
+          "description": "True if this is a single-producer system (no aggregation needed)."
+        }
+      }
+    },
+    "proof_stage_result": {
+      "type": "object",
+      "required": ["verdict", "rationale"],
+      "additionalProperties": true,
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "SKIP", "INFO"] },
+        "rationale": { "type": "string" },
+        "included_in_proof": { "type": "boolean" },
+        "window_membership": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Which rolling windows include this signal (e.g. '7d', '14d', '30d', 'all_time')."
+        },
+        "freshness_grade": {
+          "type": "string",
+          "enum": ["LIVE", "RECENT", "STALE", "EXPIRED"]
+        }
+      }
+    },
+    "trust_stage_result": {
+      "type": "object",
+      "required": ["verdict", "rationale"],
+      "additionalProperties": true,
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "SKIP", "INFO"] },
+        "rationale": { "type": "string" },
+        "accuracy_impact": {
+          "type": "string",
+          "enum": ["POSITIVE", "NEGATIVE", "NEUTRAL"],
+          "description": "Whether this signal improved or degraded accuracy."
+        },
+        "karma_contribution": { "type": "number" },
+        "brier_contribution": { "type": "number" },
+        "trust_direction": {
+          "type": "string",
+          "enum": ["IMPROVES", "DEGRADES", "NEUTRAL"],
+          "description": "Net effect on producer trust."
+        }
+      }
+    },
+    "check_result": {
+      "type": "object",
+      "required": ["check_name", "passed"],
+      "additionalProperties": true,
+      "properties": {
+        "check_name": { "type": "string" },
+        "passed": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "aggregate_forensics": {
+      "type": "object",
+      "required": [
+        "total_signals", "per_gate_failure_rates",
+        "per_symbol_gate_failures"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "total_signals": { "type": "integer", "minimum": 0 },
+        "total_fate_changes": { "type": "integer", "minimum": 0 },
+        "fate_change_rate": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "overall_pass_rate": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "per_gate_failure_rates": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/gate_failure_rate" },
+          "description": "Per-gate failure rates with Wilson CIs. Keys are gate names."
+        },
+        "per_symbol_gate_failures": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/symbol_gate_failures" },
+          "description": "Per-symbol breakdown of gate failures. Keys are symbol tickers."
+        },
+        "per_stage_summary": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/stage_summary" },
+          "description": "Summary statistics per stage. Keys are stage names."
+        }
+      }
+    },
+    "gate_failure_rate": {
+      "type": "object",
+      "required": ["gate_name", "failures", "total", "rate", "wilson_ci"],
+      "additionalProperties": false,
+      "properties": {
+        "gate_name": { "type": "string" },
+        "failures": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 },
+        "rate": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "wilson_ci": { "$ref": "#/$defs/wilson_interval" }
+      }
+    },
+    "wilson_interval": {
+      "type": "object",
+      "required": ["lower", "upper", "z"],
+      "additionalProperties": false,
+      "properties": {
+        "lower": { "type": "number" },
+        "upper": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "symbol_gate_failures": {
+      "type": "object",
+      "required": ["symbol", "total_signals", "gate_failures"],
+      "additionalProperties": false,
+      "properties": {
+        "symbol": { "type": "string" },
+        "total_signals": { "type": "integer", "minimum": 0 },
+        "gate_failures": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["failures", "rate"],
+            "additionalProperties": false,
+            "properties": {
+              "failures": { "type": "integer", "minimum": 0 },
+              "rate": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+            }
+          }
+        },
+        "total_fate_changes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "stage_summary": {
+      "type": "object",
+      "required": ["stage_name", "pass_count", "fail_count", "skip_count"],
+      "additionalProperties": true,
+      "properties": {
+        "stage_name": { "type": "string" },
+        "pass_count": { "type": "integer", "minimum": 0 },
+        "fail_count": { "type": "integer", "minimum": 0 },
+        "skip_count": { "type": "integer", "minimum": 0 },
+        "info_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "fate_changing_summary": {
+      "type": "object",
+      "required": ["total_fate_changes", "by_gate", "by_symbol"],
+      "additionalProperties": false,
+      "properties": {
+        "total_fate_changes": { "type": "integer", "minimum": 0 },
+        "fate_change_rate": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "by_gate": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["count", "fraction"],
+            "additionalProperties": false,
+            "properties": {
+              "count": { "type": "integer", "minimum": 0 },
+              "fraction": { "type": "number" },
+              "result_action": { "type": "string" }
+            }
+          }
+        },
+        "by_symbol": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["count", "fraction"],
+            "additionalProperties": false,
+            "properties": {
+              "count": { "type": "integer", "minimum": 0 },
+              "fraction": { "type": "number" }
+            }
+          }
+        },
+        "most_impactful_gate": { "type": "string" },
+        "most_impacted_symbol": { "type": "string" }
+      }
+    },
+    "failure_mode_entry": {
+      "type": "object",
+      "required": ["mode", "description", "count", "fraction"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string" },
+        "description": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 },
+        "fraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "affected_symbols": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "example_signal_id": { "type": "string" }
+      }
+    },
+    "chi_squared_result": {
+      "type": "object",
+      "required": [
+        "test_description", "statistic", "degrees_of_freedom",
+        "p_value", "independent"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "test_description": { "type": "string" },
+        "statistic": { "type": "number", "minimum": 0.0 },
+        "degrees_of_freedom": { "type": "integer", "minimum": 0 },
+        "p_value": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "independent": {
+          "type": "boolean",
+          "description": "True if p_value >= 0.05 (fail to reject independence null)."
+        },
+        "contingency_table": {
+          "type": "object",
+          "description": "Observed counts: symbol -> gate -> count.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "integer" }
+          }
+        },
+        "expected_table": {
+          "type": "object",
+          "description": "Expected counts under independence.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "number" }
+          }
+        },
+        "cramers_v": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Cramer's V effect size. 0 = no association, 1 = perfect association."
+        }
+      }
+    },
+    "limitation": {
+      "type": "object",
+      "required": ["id", "description", "bias_direction", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "bias_direction": {
+          "type": "string",
+          "enum": ["OVERSTATES", "UNDERSTATES", "AMBIGUOUS", "NEUTRAL"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH"]
+        },
+        "magnitude": { "type": "string" }
+      }
+    },
+    "hash_chain": {
+      "type": "object",
+      "required": ["algorithm", "content_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "type": "string", "const": "SHA-256" },
+        "content_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "fields_hashed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
